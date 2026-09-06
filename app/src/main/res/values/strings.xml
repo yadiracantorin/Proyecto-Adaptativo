@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">FocusTo</string>
+    <string name="status_title_normal">Modo Lectura Activo</string>
+    <string name="status_desc_normal">Visualización estándar del documento.</string>
+    <string name="btn_open_pdf">Abrir PDF</string>
+    <string name="sensor_info_default">Sensor de Luz: N/A</string>
+    <string name="pdf_image_desc">Vista previa del documento PDF</string>
+
+    <!-- Nuevas cadenas para eliminar advertencias -->
+    <string name="btn_prev_page">◀ Anterior</string>
+    <string name="btn_next_page">Siguiente ▶</string>
+    <string name="status_night_title">Modo Nocturno / Enfoque</string>
+    <string name="status_night_desc">Zoom aplicado. Desliza para leer y usa los botones para cambiar de página.</string>
+    <string name="sensor_unavailable">Sensor de Luz: No disponible</string>
+    <string name="sensor_lux_format">Sensor de Luz: %1$d lx</string>
+    <string name="page_info_format">%1$s | Pág. %2$d de %3$d</string>
+</resources>

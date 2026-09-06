@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rootLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_normal"
+    android:fitsSystemWindows="true"
+    android:padding="16dp">
+
+    <!-- Botón para abrir PDF -->
+    <Button
+        android:id="@+id/btnOpenPdf"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentTop="true"
+        android:layout_marginTop="8dp"
+        android:text="@string/btn_open_pdf" />
+
+    <!-- Información de Estado y Sensor -->
+    <TextView
+        android:id="@+id/tvStatusTitle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_toStartOf="@id/btnOpenPdf"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentTop="true"
+        android:layout_marginTop="8dp"
+        android:text="@string/status_title_normal"
+        android:textColor="@color/text_title_normal"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tvStatusDesc"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/tvStatusTitle"
+        android:text="@string/status_desc_normal"
+        android:textColor="@color/text_desc_normal"
+        android:textSize="14sp"
+        android:layout_marginBottom="8dp"/>
+
+    <TextView
+        android:id="@+id/tvSensorInfo"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/tvStatusDesc"
+        android:text="@string/sensor_info_default"
+        android:textColor="@color/sensor_text_normal"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="8dp"/>
+
+    <!-- Contenedor Scrollable estable para el PDF -->
+    <HorizontalScrollView
+        android:id="@+id/horizontalScrollPdf"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_above="@id/layoutPagination"
+        android:layout_below="@id/tvSensorInfo"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:fillViewport="true">
+
+        <ScrollView
+            android:id="@+id/verticalScrollPdf"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:fillViewport="true">
+
+            <RelativeLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content">
+
+                <!-- Imagen del PDF -->
+                <ImageView
+                    android:id="@+id/pdfImageView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:adjustViewBounds="true"
+                    android:scaleType="fitCenter"
+                    android:contentDescription="@string/pdf_image_desc" />
+
+                <!-- Filtro Nocturno / Cálido superpuesto -->
+                <View
+                    android:id="@+id/warmFilterOverlay"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="#33FF9100"
+                    android:visibility="gone" />
+
+            </RelativeLayout>
+        </ScrollView>
+    </HorizontalScrollView>
+
+    <!-- Barra de navegación de páginas con texto de alto contraste -->
+    <LinearLayout
+        android:id="@+id/layoutPagination"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:orientation="horizontal"
+        android:gravity="center"
+        style="?android:attr/buttonBarStyle">
+
+        <Button
+            android:id="@+id/btnPrevPage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:text="@string/btn_prev_page"
+            android:textColor="@color/text_title_normal"
+            style="?android:attr/buttonBarButtonStyle" />
+
+        <Button
+            android:id="@+id/btnNextPage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="@string/btn_next_page"
+            android:textColor="@color/text_title_normal"
+            style="?android:attr/buttonBarButtonStyle" />
+
+    </LinearLayout>
+
+</RelativeLayout>

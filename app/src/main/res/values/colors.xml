@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_normal">#F5F5F5</color>
+    <color name="text_title_normal">#212121</color>
+    <color name="text_desc_normal">#555555</color>
+
+    <color name="bg_night">#121212</color>
+    <color name="text_title_night">#FFFFFF</color>
+    <color name="text_desc_night">#AAAAAA</color>
+
+    <!-- Verde oscuro con alto contraste para fondo claro -->
+    <color name="sensor_text_normal">#2E7D32</color>
+    <!-- Verde brillante para fondo oscuro -->
+    <color name="sensor_text_night">#00E676</color>
+</resources>
