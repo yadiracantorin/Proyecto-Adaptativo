@@ -22,7 +22,13 @@
     <string name="status_study">ESTUDIANDO</string>
     <string name="status_break">DESCANSO</string>
     <string name="lock_message">¡CONCÉNTRATE!\nHas agitado demasiado el dispositivo.</string>
+    <string name="lock_message_app_blocked">¡REGRESA AL ESTUDIO!\nSesión activa. Cierra la app distractora.</string>
+    <string name="lock_message_face_absent">PAUSA AUTOMÁTICA\nRetoma la lectura para continuar el tiempo.</string>
     <string name="btn_unlock">ENTENDIDO, VOLVER</string>
+    <!-- Modo Estudio Físico (celular boca abajo) -->
+    <string name="physical_study_started">📚 ¡Modo Estudio Físico activado! Sigue así.</string>
+    <string name="physical_study_light_alert">💡 La iluminación parece baja. Asegúrate de tener buena luz.</string>
+    <string name="physical_study_no_pdf_hint">Sin PDF cargado: el enfoque físico está activo. ¡Concentración total!</string>
 
     <!-- Alertas de Salud y Postura -->
     <string name="alert_bad_posture">¡ENDEREZA TU ESPALDA!\nMantén una postura saludable para tu cuello.</string>

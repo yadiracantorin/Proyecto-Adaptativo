@@ -1,42 +1,47 @@
 package com.example.focusto
 
-enum class AdaptationMode {
+enum class ConcentrationMode {
     NORMAL,
-    NIGHT_READING,
-    COOL_DOWN_LOCK,
+    DEEP_FOCUS, // Celular boca abajo (Premio)
+    COOL_DOWN_LOCK, // Agitación (Castigo)
     BAD_POSTURE,
     TOO_CLOSE,
-    FACE_ABSENT
+    FACE_ABSENT // Celular boca arriba quieto (Pausa)
 }
 
 class AdaptationEngine {
 
-    fun evaluateAdaptation(state: ContextState, isReading: Boolean, manager: ContextManager): AdaptationMode {
-        // Prioridad 1: Detección de agitación violenta
+    fun evaluateConcentration(state: ContextState, manager: ContextManager): ConcentrationMode {
+        // 1. Agitación violenta
         if (manager.isShaking(state.rawAccel)) {
-            return AdaptationMode.COOL_DOWN_LOCK
+            return ConcentrationMode.COOL_DOWN_LOCK
         }
 
-        // Prioridad 2: Ausencia (para pausa automática)
-        if (manager.isFaceAbsent(state.rawInclination, state.rawAccel)) {
-            return AdaptationMode.FACE_ABSENT
+        // 2. Estudio Profundo (Boca abajo - Ángulo > 150 grados)
+        if (state.rawInclination > 150.0f) {
+            return ConcentrationMode.DEEP_FOCUS
         }
 
-        // Prioridad 3: Salud Visual (Distancia)
+        // 3. Ausencia (Boca arriba sobre mesa - Ángulo < 15 grados y sin movimiento)
+        if (state.rawInclination < 15.0f && state.rawAccel < 0.5f) {
+            return ConcentrationMode.FACE_ABSENT
+        }
+
+        // 4. Salud Visual (Distancia - Sensor de proximidad)
         if (manager.isTooClose(state.rawProximity)) {
-            return AdaptationMode.TOO_CLOSE
+            return ConcentrationMode.TOO_CLOSE
         }
 
-        // Prioridad 4: Ergonomía (Postura)
+        // 5. Ergonomía (Postura - Menos de 45 grados mirando hacia abajo)
         if (manager.hasBadPosture(state.rawInclination)) {
-            return AdaptationMode.BAD_POSTURE
+            return ConcentrationMode.BAD_POSTURE
         }
 
-        // Prioridad 5: Modo nocturno
-        if (manager.isDarkStable(state.rawLux) || (isReading && state.rawLux < 10.0f)) {
-            return AdaptationMode.NIGHT_READING
-        }
+        return ConcentrationMode.NORMAL
+    }
 
-        return AdaptationMode.NORMAL
+    fun shouldEnableNightMode(state: ContextState, isReading: Boolean, manager: ContextManager): Boolean {
+        // El modo nocturno ahora se evalúa por separado para que siempre funcione según la luz
+        return manager.isDarkStable(state.rawLux) || (isReading && state.rawLux < 15.0f)
     }
 }

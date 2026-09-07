@@ -19,6 +19,15 @@
         android:layout_alignParentTop="true"
         android:layout_marginBottom="8dp">
 
+        <!-- Motivador Adaptativo -->
+        <ImageView
+            android:id="@+id/ivFocusMotivator"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:layout_marginEnd="8dp"
+            android:src="@drawable/ic_focus_seed"
+            android:contentDescription="Motivador de enfoque"/>
+
         <TextView
             android:id="@+id/tvPomodoroTimer"
             android:layout_width="wrap_content"

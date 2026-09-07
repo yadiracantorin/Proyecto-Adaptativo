@@ -13,17 +13,22 @@ class ContextManager(private val onStateUpdated: (ContextState) -> Unit) {
 
     private var lastTouchTime: Long = 0
     private var darkStateStartTime: Long = 0
-    private val darkConfirmationDelayMs = 1500L
+    private val darkConfirmationDelayMs = 1000L
+
+    // Estado confirmado del Modo Estudio Físico (boca abajo)
+    private var faceDownStartTime: Long = 0
+    private val faceDownConfirmationDelayMs = 1500L
+    private var _isPhysicalStudyModeActive: Boolean = false
+    val isPhysicalStudyModeActive: Boolean get() = _isPhysicalStudyModeActive
 
     // Umbrales calibrados
-    private val lightThresholdLux = 8.0f
-    private val shakeThresholdAccel = 12.0f
+    private val lightThresholdLux = 12.0f
+    private val shakeThresholdAccel = 15.0f
     
-    // Umbrales de salud y enfoque (Basados en ángulo 0-90)
-    // Nota: El sensor de proximidad en la mayoría de celulares es binario (Cerca=0, Lejos=5 o 8).
-    // Si el hardware lo permite, 25cm sería ideal, pero usualmente reacciona a < 5cm.
-    private val proximityThresholdTooClose = 25.0f 
-    private val postureThresholdAngle = 45.0f    // Menos de 45 grados es mala postura (mirar abajo)
+    // Nota: El sensor de proximidad en la mayoría de celulares reacciona a < 5cm.
+    // Usamos un umbral genérico que detecte la activación del sensor.
+    private val proximityThreshold = 4.0f
+    private val postureThresholdAngle = 45.0f
 
     fun processRawData(lux: Float, accel: Float, proximity: Float, inclination: Float) {
         val currentState = ContextState(
@@ -32,7 +37,27 @@ class ContextManager(private val onStateUpdated: (ContextState) -> Unit) {
             rawProximity = proximity, 
             rawInclination = inclination
         )
+        // Actualizar el estado del Modo Físico antes de notificar
+        updatePhysicalStudyMode(inclination)
         onStateUpdated(currentState)
+    }
+
+    /**
+     * Detecta con confirmación temporal si el celular está boca abajo (inclinación > 150°).
+     * Requiere que permanezca en esa posición por [faceDownConfirmationDelayMs] ms.
+     */
+    private fun updatePhysicalStudyMode(inclination: Float) {
+        val currentTime = SystemClock.elapsedRealtime()
+        val isFaceDown = inclination > 150.0f
+        if (isFaceDown) {
+            if (faceDownStartTime == 0L) {
+                faceDownStartTime = currentTime
+            }
+            _isPhysicalStudyModeActive = (currentTime - faceDownStartTime) >= faceDownConfirmationDelayMs
+        } else {
+            faceDownStartTime = 0L
+            _isPhysicalStudyModeActive = false
+        }
     }
 
     fun registerUserTouch() {
@@ -40,7 +65,7 @@ class ContextManager(private val onStateUpdated: (ContextState) -> Unit) {
     }
 
     fun isUserActivelyReading(): Boolean {
-        return (SystemClock.elapsedRealtime() - lastTouchTime) < 10000L
+        return (SystemClock.elapsedRealtime() - lastTouchTime) < 15000L
     }
 
     fun isDarkStable(lux: Float): Boolean {
@@ -61,21 +86,12 @@ class ContextManager(private val onStateUpdated: (ContextState) -> Unit) {
     }
 
     fun isTooClose(proximity: Float): Boolean {
-        return proximity < proximityThresholdTooClose
+        // Alertamos si el sensor detecta que algo está cerca
+        return proximity < proximityThreshold
     }
 
     fun hasBadPosture(inclination: Float): Boolean {
-        // En nuestro nuevo sistema: 0 es horizontal (mesa), 90 es vertical (cara)
-        // Alertamos si el ángulo es menor a 45 (demasiado inclinado hacia abajo)
-        // Pero evitamos alertar si está casi totalmente plano (mesa), eso lo maneja FACE_ABSENT
+        // Ángulo de inclinación saludable: > 45 grados respecto a la mesa
         return inclination < postureThresholdAngle && inclination > 15.0f
-    }
-
-    fun isFaceAbsent(inclination: Float, accel: Float): Boolean {
-        // Ausencia si está boca abajo (ángulo > 160) 
-        // O si está en una superficie plana (ángulo < 15) Y no se mueve (accel < 0.2)
-        val isFaceDown = inclination > 160.0f
-        val isOnTable = inclination < 15.0f && accel < 0.2f
-        return isFaceDown || isOnTable
     }
 }
