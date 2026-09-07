@@ -14,4 +14,18 @@
     <string name="sensor_unavailable">Sensor de Luz: No disponible</string>
     <string name="sensor_lux_format">Sensor de Luz: %1$d lx</string>
     <string name="page_info_format">%1$s | Pág. %2$d de %3$d</string>
+
+    <!-- Pomodoro y Adaptación -->
+    <string name="timer_default">25:00</string>
+    <string name="btn_start_pomodoro">INICIAR</string>
+    <string name="btn_reset_pomodoro">REINICIAR</string>
+    <string name="status_study">ESTUDIANDO</string>
+    <string name="status_break">DESCANSO</string>
+    <string name="lock_message">¡CONCÉNTRATE!\nHas agitado demasiado el dispositivo.</string>
+    <string name="btn_unlock">ENTENDIDO, VOLVER</string>
+
+    <!-- Alertas de Salud y Postura -->
+    <string name="alert_bad_posture">¡ENDEREZA TU ESPALDA!\nMantén una postura saludable para tu cuello.</string>
+    <string name="alert_too_close">¡MUY CERCA!\nAleja el teléfono para proteger tu vista.</string>
+    <string name="alert_face_absent">PAUSA AUTOMÁTICA\nRetoma la lectura para continuar el tiempo.</string>
 </resources>

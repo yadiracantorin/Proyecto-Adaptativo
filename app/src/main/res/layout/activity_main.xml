@@ -7,13 +7,51 @@
     android:fitsSystemWindows="true"
     android:padding="16dp">
 
+    <!-- Panel Pomodoro Superior -->
+    <LinearLayout
+        android:id="@+id/layoutPomodoro"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="8dp"
+        android:background="#1A000000"
+        android:layout_alignParentTop="true"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:id="@+id/tvPomodoroTimer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/timer_default"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_title_normal"
+            android:layout_marginEnd="16dp"/>
+
+        <Button
+            android:id="@+id/btnStartPomodoro"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/btn_start_pomodoro"
+            android:layout_marginEnd="8dp"/>
+
+        <Button
+            android:id="@+id/btnResetPomodoro"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/btn_reset_pomodoro"/>
+    </LinearLayout>
+
     <!-- Botón para abrir PDF -->
     <Button
         android:id="@+id/btnOpenPdf"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_alignParentEnd="true"
-        android:layout_alignParentTop="true"
+        android:layout_below="@id/layoutPomodoro"
         android:layout_marginTop="8dp"
         android:text="@string/btn_open_pdf" />
 
@@ -24,7 +62,7 @@
         android:layout_height="wrap_content"
         android:layout_toStartOf="@id/btnOpenPdf"
         android:layout_alignParentStart="true"
-        android:layout_alignParentTop="true"
+        android:layout_below="@id/layoutPomodoro"
         android:layout_marginTop="8dp"
         android:text="@string/status_title_normal"
         android:textColor="@color/text_title_normal"
@@ -50,7 +88,21 @@
         android:textColor="@color/sensor_text_normal"
         android:textSize="14sp"
         android:textStyle="bold"
-        android:layout_marginBottom="8dp"/>
+        android:layout_marginBottom="4dp"/>
+
+    <!-- Banner de Alertas de Salud (No bloqueante) -->
+    <TextView
+        android:id="@+id/tvHealthAlert"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/tvSensorInfo"
+        android:background="#FFFF0000"
+        android:textColor="#FFFFFF"
+        android:textStyle="bold"
+        android:padding="8dp"
+        android:gravity="center"
+        android:visibility="gone"
+        android:layout_marginBottom="4dp"/>
 
     <!-- Contenedor Scrollable estable para el PDF -->
     <HorizontalScrollView
@@ -58,7 +110,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_above="@id/layoutPagination"
-        android:layout_below="@id/tvSensorInfo"
+        android:layout_below="@id/tvHealthAlert"
         android:layout_marginTop="8dp"
         android:layout_marginBottom="8dp"
         android:fillViewport="true">
@@ -123,5 +175,36 @@
             style="?android:attr/buttonBarButtonStyle" />
 
     </LinearLayout>
+
+    <!-- Overlay de Bloqueo Anti-procrastinación -->
+    <RelativeLayout
+        android:id="@+id/layoutLockOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#E6000000"
+        android:elevation="10dp"
+        android:visibility="gone"
+        android:gravity="center"
+        android:padding="32dp">
+
+        <TextView
+            android:id="@+id/tvLockMessage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/lock_message"
+            android:textColor="#FFFFFF"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="24dp"/>
+
+        <Button
+            android:id="@+id/btnUnlock"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@id/tvLockMessage"
+            android:layout_centerHorizontal="true"
+            android:text="@string/btn_unlock"/>
+    </RelativeLayout>
 
 </RelativeLayout>
