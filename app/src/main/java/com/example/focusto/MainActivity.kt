@@ -34,8 +34,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -66,14 +70,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvLockMessage: TextView
     private lateinit var btnUnlock: Button
 
-    // El timer YA NO vive aquí — vive en FocusService (sobrevive pantalla apagada)
-    private var isPomodoroRunning = false
-    private var isBreakTime = false
-    private var currentSessionDuration = 25 * 60 * 1000L  // para actualizar el motivador
-
-    // --- Estado del Modo Estudio Físico ---
-    private var isPdfLoaded = false
-    private var physicalStudyModeNotified = false
+    // El timer YA NO vive aquí — vive en FocusService (sobrevive pantalla apagada).
+    // El estado de UI (running/break/duración/PDF/zoom/alertas) vive en FocusViewModel,
+    // que sobrevive a la recreación de la Activity (p. ej. al rotar la pantalla) y evita
+    // que la UI quede desincronizada del FocusService real.
+    private lateinit var viewModel: FocusViewModel
 
     /**
      * Receiver unificado: escucha los 3 eventos que emite FocusService.
@@ -86,10 +87,10 @@ class MainActivity : AppCompatActivity() {
             when (intent?.action) {
                 FocusService.ACTION_TIMER_TICK -> {
                     val left  = intent.getLongExtra(FocusService.EXTRA_MILLIS_LEFT, 0L)
-                    val total = intent.getLongExtra(FocusService.EXTRA_TOTAL_MILLIS, currentSessionDuration)
+                    val total = intent.getLongExtra(FocusService.EXTRA_TOTAL_MILLIS, viewModel.currentState.currentSessionDuration)
                     val min   = (left / 1000) / 60
                     val sec   = (left / 1000) % 60
-                    tvPomodoroTimer.text = String.format("%02d:%02d", min, sec)
+                    viewModel.onTimerTick(String.format("%02d:%02d", min, sec))
                     updateMotivator(left, total)
                 }
                 FocusService.ACTION_TIMER_FINISH -> {
@@ -98,7 +99,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 FocusService.ACTION_PROGRESS_UPDATE -> {
                     val elapsed = intent.getLongExtra(FocusService.EXTRA_MILLIS_ELAPSED, 0L)
-                    val total   = intent.getLongExtra(FocusService.EXTRA_TOTAL_MILLIS, currentSessionDuration)
+                    val total   = intent.getLongExtra(FocusService.EXTRA_TOTAL_MILLIS, viewModel.currentState.currentSessionDuration)
                     updateMotivator((total - elapsed).coerceAtLeast(0L), total)
                 }
             }
@@ -114,11 +115,6 @@ class MainActivity : AppCompatActivity() {
     private var currentPdfPage: PdfRenderer.Page? = null
     private var fileDescriptor: ParcelFileDescriptor? = null
 
-    private var currentPageIndex: Int = 0
-    private var totalPages: Int = 0
-    private var isNightModeActive: Boolean = false
-    private var currentLuxValue: Int = 0
-
     private lateinit var sensorService: SensorService
     private lateinit var contextManager: ContextManager
     private val adaptationEngine = AdaptationEngine()
@@ -132,11 +128,15 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        viewModel = ViewModelProvider(this).get(FocusViewModel::class.java)
         try {
             setContentView(R.layout.activity_main)
             initViews()
             setupConcentrationSystems()
             setupListeners()
+            currentZoomLevel = viewModel.currentState.zoomLevel
+            observeUiState()
+            restorePdfIfNeeded()
             checkIntent(intent)
         } catch (e: Exception) {
             e.printStackTrace()
@@ -187,35 +187,96 @@ class MainActivity : AppCompatActivity() {
         setupZoomGestures()
     }
 
+    // ─── Estado de UI (FocusViewModel) ──────────────────────────────────────
+
+    /**
+     * Suscripción continua al estado: aplica textos/colores/visibilidad de las vistas
+     * "ligeras" (timer, botón, alertas, overlay de bloqueo, texto de sensor/página).
+     * Deliberadamente NO dispara el renderizado del PDF (operación pesada) — eso solo
+     * ocurre en los puntos explícitos (navegación, gesto de zoom, cambio de modo nocturno).
+     */
+    private fun observeUiState() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.uiState.collect { state -> render(state) }
+            }
+        }
+    }
+
+    private fun render(state: FocusUiState) {
+        tvPomodoroTimer.text = state.timerText
+        btnStartPomodoro.text = state.startButtonText
+
+        val alert = state.healthAlert
+        if (alert != null) {
+            tvHealthAlert.text = alert.message
+            tvHealthAlert.setBackgroundColor(
+                ContextCompat.getColor(
+                    this,
+                    if (alert.isPositive) android.R.color.holo_green_dark else android.R.color.holo_red_dark
+                )
+            )
+            tvHealthAlert.visibility = View.VISIBLE
+        } else {
+            tvHealthAlert.visibility = View.GONE
+        }
+
+        if (state.lockMessage != null) {
+            tvLockMessage.text = state.lockMessage
+            layoutLockOverlay.visibility = View.VISIBLE
+        } else {
+            layoutLockOverlay.visibility = View.GONE
+        }
+
+        applyNightModeColors(state.isNightModeActive)
+        updateSensorAndPageText(state)
+    }
+
+    /** Restaura el PDF abierto antes de que la Activity se recreara (p. ej. por rotación). */
+    private fun restorePdfIfNeeded() {
+        val state = viewModel.currentState
+        val uriString = state.pdfUriString ?: return
+        try {
+            openPdfFromUri(Uri.parse(uriString))
+            if (state.currentPageIndex in 0 until state.totalPages) {
+                viewModel.onPageChanged(state.currentPageIndex)
+                renderPage(state.currentPageIndex)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     private fun setupConcentrationSystems() {
         contextManager = ContextManager { state ->
             runOnUiThread {
-                currentLuxValue = state.rawLux.toInt()
-                updateSensorAndPageText()
+                viewModel.onLuxUpdated(state.rawLux.toInt())
 
                 // 1. Adaptación de Luz (Independiente)
                 val nightNeeded = adaptationEngine.shouldEnableNightMode(state, contextManager.isUserActivelyReading(), contextManager)
-                if (nightNeeded && !isNightModeActive) toggleNightMode(true)
-                else if (!nightNeeded && isNightModeActive && state.rawLux >= 15.0f) toggleNightMode(false)
+                val nightActive = viewModel.currentState.isNightModeActive
+                if (nightNeeded && !nightActive) toggleNightMode(true)
+                else if (!nightNeeded && nightActive && state.rawLux >= 15.0f) toggleNightMode(false)
 
                 // 2. Concentración y Salud
-                if (isPomodoroRunning && !isBreakTime) {
+                val vmState = viewModel.currentState
+                if (vmState.isPomodoroRunning && !vmState.isBreakTime) {
                     val mode = adaptationEngine.evaluateConcentration(state, contextManager)
                     handleConcentrationMode(mode)
 
                     // --- INTUICIÓN: Detectar Modo Estudio Físico sin PDF ---
                     // Si el Pomodoro corre, no hay PDF y el celular está confirmado boca abajo,
                     // activamos el aviso de Modo Físico con vibración (una sola vez por sesión)
-                    if (!isPdfLoaded && contextManager.isPhysicalStudyModeActive && !physicalStudyModeNotified) {
-                        physicalStudyModeNotified = true
+                    if (!vmState.isPdfLoaded && contextManager.isPhysicalStudyModeActive && !vmState.physicalStudyModeNotified) {
+                        viewModel.setPhysicalStudyModeNotified(true)
                         onPhysicalStudyModeActivated(state.rawLux)
                     } else if (!contextManager.isPhysicalStudyModeActive) {
                         // Resetear para que pueda notificar de nuevo si baja y sube
-                        physicalStudyModeNotified = false
+                        viewModel.setPhysicalStudyModeNotified(false)
                     }
                 } else {
                     hideHealthAlert()
-                    physicalStudyModeNotified = false
+                    viewModel.setPhysicalStudyModeNotified(false)
                 }
             }
         }
@@ -239,9 +300,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             getString(R.string.physical_study_no_pdf_hint)
         }
-        tvHealthAlert.text = message
-        tvHealthAlert.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
-        tvHealthAlert.visibility = View.VISIBLE
+        showHealthAlert(message, isPositive = true)
 
         Toast.makeText(this, getString(R.string.physical_study_started), Toast.LENGTH_SHORT).show()
     }
@@ -271,11 +330,8 @@ class MainActivity : AppCompatActivity() {
             ConcentrationMode.DEEP_FOCUS -> {
                 // Si hay PDF cargado, mostrar el banner de enfoque profundo normal
                 // Si no hay PDF, la intuición se encarga (onPhysicalStudyModeActivated)
-                if (isPdfLoaded) {
-                    hideHealthAlert()
-                    tvHealthAlert.text = "¡MODO ENFOQUE PROFUNDO ACTIVO!"
-                    tvHealthAlert.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
-                    tvHealthAlert.visibility = View.VISIBLE
+                if (viewModel.currentState.isPdfLoaded) {
+                    showHealthAlert("¡MODO ENFOQUE PROFUNDO ACTIVO!", isPositive = true)
                 }
             }
             ConcentrationMode.COOL_DOWN_LOCK -> {
@@ -298,19 +354,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showLockOverlay(message: String) {
-        tvLockMessage.text = message
-        layoutLockOverlay.visibility = View.VISIBLE
+        viewModel.showLockOverlay(message)
         pausePomodoro()
     }
 
-    private fun showHealthAlert(message: String) {
-        tvHealthAlert.text = message
-        tvHealthAlert.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_red_dark))
-        tvHealthAlert.visibility = View.VISIBLE
+    private fun showHealthAlert(message: String, isPositive: Boolean = false) {
+        viewModel.showHealthAlert(message, isPositive)
     }
 
     private fun hideHealthAlert() {
-        tvHealthAlert.visibility = View.GONE
+        viewModel.hideHealthAlert()
     }
 
     private fun setupZoomGestures() {
@@ -325,7 +378,8 @@ class MainActivity : AppCompatActivity() {
             override fun onScaleEnd(detector: ScaleGestureDetector) {
                 currentZoomLevel *= pdfImageView.scaleX
                 currentZoomLevel = currentZoomLevel.coerceIn(minZoomLevel, maxZoomLevel)
-                if (totalPages > 0) renderPage(currentPageIndex)
+                viewModel.onZoomChanged(currentZoomLevel)
+                if (viewModel.currentState.totalPages > 0) renderPage(viewModel.currentState.currentPageIndex)
             }
         })
 
@@ -367,33 +421,37 @@ class MainActivity : AppCompatActivity() {
     private fun setupListeners() {
         btnOpenPdf.setOnClickListener { selectPdfLauncher.launch("application/pdf") }
         btnNextPage.setOnClickListener {
-            if (totalPages > 0 && currentPageIndex < totalPages - 1) {
-                currentPageIndex++
-                renderPage(currentPageIndex)
+            val state = viewModel.currentState
+            if (state.totalPages > 0 && state.currentPageIndex < state.totalPages - 1) {
+                val newIndex = state.currentPageIndex + 1
+                viewModel.onPageChanged(newIndex)
+                renderPage(newIndex)
             }
         }
         btnPrevPage.setOnClickListener {
-            if (totalPages > 0 && currentPageIndex > 0) {
-                currentPageIndex--
-                renderPage(currentPageIndex)
+            val state = viewModel.currentState
+            if (state.totalPages > 0 && state.currentPageIndex > 0) {
+                val newIndex = state.currentPageIndex - 1
+                viewModel.onPageChanged(newIndex)
+                renderPage(newIndex)
             }
         }
-        btnStartPomodoro.setOnClickListener { if (isPomodoroRunning) pausePomodoro() else startPomodoro() }
+        btnStartPomodoro.setOnClickListener {
+            if (viewModel.currentState.isPomodoroRunning) pausePomodoro() else startPomodoro()
+        }
         btnResetPomodoro.setOnClickListener { resetPomodoro() }
         btnUnlock.setOnClickListener {
-            layoutLockOverlay.visibility = View.GONE
+            viewModel.hideLockOverlay()
         }
     }
 
     private fun startPomodoro() {
         if (!checkPermissions()) return
-        isPomodoroRunning = true
-        physicalStudyModeNotified = false
-        btnStartPomodoro.text = "PAUSAR"
+        viewModel.onPomodoroStarted()
         setSilentMode(true)
 
-        currentSessionDuration = if (isBreakTime) 5 * 60 * 1000L else 25 * 60 * 1000L
-        sendToFocusService(FocusService.ACTION_START_FOCUS, currentSessionDuration, isBreakTime)
+        val state = viewModel.currentState
+        sendToFocusService(FocusService.ACTION_START_FOCUS, state.currentSessionDuration, state.isBreakTime)
     }
 
     /**
@@ -403,46 +461,33 @@ class MainActivity : AppCompatActivity() {
      */
     private fun onPomodoroFinished(wasBreak: Boolean) {
         setSilentMode(false)
-        isPomodoroRunning = false
+        viewModel.onPomodoroFinished(wasBreak)
+        val state = viewModel.currentState
 
         if (!wasBreak) {
             // Terminó sesión de estudio → inicia descanso automáticamente
-            isBreakTime = true
             Toast.makeText(this, "✅ ¡Pomodoro completado! Descansa 5 minutos.", Toast.LENGTH_LONG).show()
-            btnStartPomodoro.text = "PAUSAR"
-            currentSessionDuration = 5 * 60 * 1000L
-            tvPomodoroTimer.text = "05:00"
-            updateMotivator(0L, 25 * 60 * 1000L)   // motivador en estado máximo (flor/constelación)
-            isPomodoroRunning = true
+            updateMotivator(0L, FocusViewModel.STUDY_DURATION_MS)   // motivador en estado máximo (flor/constelación)
             setSilentMode(false)
-            sendToFocusService(FocusService.ACTION_START_FOCUS, currentSessionDuration, true)
+            sendToFocusService(FocusService.ACTION_START_FOCUS, state.currentSessionDuration, true)
         } else {
             // Terminó descanso → volver a estado inicial
-            isBreakTime = false
             Toast.makeText(this, "☕ ¡Descanso terminado! Listo para otra sesión.", Toast.LENGTH_LONG).show()
-            btnStartPomodoro.text = "INICIAR"
-            tvPomodoroTimer.text = "25:00"
-            currentSessionDuration = 25 * 60 * 1000L
-            updateMotivator(25 * 60 * 1000L, 25 * 60 * 1000L)   // motivador al inicio (semilla)
+            updateMotivator(FocusViewModel.STUDY_DURATION_MS, FocusViewModel.STUDY_DURATION_MS)   // motivador al inicio (semilla)
         }
     }
 
     private fun pausePomodoro() {
-        isPomodoroRunning = false
-        btnStartPomodoro.text = "CONTINUAR"
+        viewModel.onPomodoroPaused()
         setSilentMode(false)
         sendToFocusService(FocusService.ACTION_PAUSE_FOCUS)
     }
 
     private fun resetPomodoro() {
-        isPomodoroRunning = false
-        isBreakTime = false
-        btnStartPomodoro.text = "INICIAR"
-        tvPomodoroTimer.text = "25:00"
-        currentSessionDuration = 25 * 60 * 1000L
+        viewModel.onPomodoroReset()
         setSilentMode(false)
         sendToFocusService(FocusService.ACTION_STOP_FOCUS)
-        updateMotivator(25 * 60 * 1000L, 25 * 60 * 1000L)
+        updateMotivator(FocusViewModel.STUDY_DURATION_MS, FocusViewModel.STUDY_DURATION_MS)
     }
 
     // ─── Helpers de comunicación con FocusService ───────────────────────────
@@ -450,8 +495,8 @@ class MainActivity : AppCompatActivity() {
     /** Envía cualquier acción al FocusService, opcionalmente con duración y tipo de sesión */
     private fun sendToFocusService(
         action: String,
-        durationMs: Long = currentSessionDuration,
-        isBreak: Boolean = isBreakTime
+        durationMs: Long = viewModel.currentState.currentSessionDuration,
+        isBreak: Boolean = viewModel.currentState.isBreakTime
     ) {
         val intent = Intent(this, FocusService::class.java).apply {
             this.action = action
@@ -494,7 +539,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateMotivator(millisLeft: Long, totalTime: Long) {
         val progress = 1.0f - (millisLeft.toFloat() / totalTime.coerceAtLeast(1L))
         val stage = (progress * 4).toInt().coerceIn(0, 3)
-        val resId = if (isNightModeActive) {
+        val resId = if (viewModel.currentState.isNightModeActive) {
             when (stage) {
                 0    -> R.drawable.ic_focus_star1
                 1    -> R.drawable.ic_focus_star1
@@ -533,11 +578,10 @@ class MainActivity : AppCompatActivity() {
             fileDescriptor = ParcelFileDescriptor.open(tempFile, ParcelFileDescriptor.MODE_READ_ONLY)
             fileDescriptor?.let { fd ->
                 pdfRenderer = PdfRenderer(fd)
-                totalPages = pdfRenderer?.pageCount ?: 0
-                currentPageIndex = 0
-                if (totalPages > 0) {
-                    isPdfLoaded = true // ← El usuario tiene material digital; desactiva la intuición física
-                    renderPage(currentPageIndex)
+                val pageCount = pdfRenderer?.pageCount ?: 0
+                if (pageCount > 0) {
+                    viewModel.onPdfOpened(uri.toString(), pageCount) // ← El usuario tiene material digital; desactiva la intuición física
+                    renderPage(0)
                 }
             }
         } catch (e: Exception) {
@@ -558,7 +602,7 @@ class MainActivity : AppCompatActivity() {
                 val multiplier = currentZoomLevel
                 val bitmap = createBitmap((page.width * multiplier).toInt(), (page.height * multiplier).toInt(), Bitmap.Config.ARGB_8888)
                 page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                val processedBitmap = if (isNightModeActive) invertBitmapColors(bitmap) else bitmap
+                val processedBitmap = if (viewModel.currentState.isNightModeActive) invertBitmapColors(bitmap) else bitmap
                 withContext(Dispatchers.Main) {
                     pdfImageView.scaleX = 1.0f
                     pdfImageView.scaleY = 1.0f
@@ -587,13 +631,13 @@ class MainActivity : AppCompatActivity() {
         return output
     }
 
-    private fun updateSensorAndPageText() {
-        val luxString = getString(R.string.sensor_lux_format, currentLuxValue)
-        tvSensorInfo.text = if (totalPages > 0) getString(R.string.page_info_format, luxString, currentPageIndex + 1, totalPages) else luxString
+    private fun updateSensorAndPageText(state: FocusUiState = viewModel.currentState) {
+        val luxString = getString(R.string.sensor_lux_format, state.currentLuxValue)
+        tvSensorInfo.text = if (state.totalPages > 0) getString(R.string.page_info_format, luxString, state.currentPageIndex + 1, state.totalPages) else luxString
     }
 
-    private fun toggleNightMode(enable: Boolean) {
-        isNightModeActive = enable
+    /** Aplica solo los colores/textos derivados del modo nocturno (operación liviana). */
+    private fun applyNightModeColors(enable: Boolean) {
         val bgColor = ContextCompat.getColor(this, if (enable) R.color.bg_night else R.color.bg_normal)
         val titleColor = ContextCompat.getColor(this, if (enable) R.color.text_title_night else R.color.text_title_normal)
         val descColor = ContextCompat.getColor(this, if (enable) R.color.text_desc_night else R.color.text_desc_normal)
@@ -606,7 +650,12 @@ class MainActivity : AppCompatActivity() {
         btnNextPage.setTextColor(titleColor)
         tvStatusTitle.text = getString(if (enable) R.string.status_night_title else R.string.status_title_normal)
         tvStatusDesc.text = getString(if (enable) R.string.status_night_desc else R.string.status_desc_normal)
-        if (totalPages > 0) renderPage(currentPageIndex)
+    }
+
+    /** Cambia el modo nocturno y re-renderiza el PDF (única operación pesada disparada por este evento). */
+    private fun toggleNightMode(enable: Boolean) {
+        viewModel.onNightModeChanged(enable)
+        if (viewModel.currentState.totalPages > 0) renderPage(viewModel.currentState.currentPageIndex)
     }
 
     private fun closePdfRenderer() {
@@ -617,8 +666,7 @@ class MainActivity : AppCompatActivity() {
             pdfRenderer = null
             fileDescriptor?.close()
             fileDescriptor = null
-            isPdfLoaded = false
-            totalPages = 0
+            viewModel.onPdfClosed()
         } catch (e: Exception) { e.printStackTrace() }
     }
 
