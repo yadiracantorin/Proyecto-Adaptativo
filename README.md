@@ -38,20 +38,17 @@ Ejemplos observables (se pueden probar en vivo):
 - Android SDK: `compileSdk 34`, `minSdk 24`
 - Se recomienda **dispositivo físico** para probar la adaptación por sensores: muchos emuladores no simulan bien el sensor de luz ni el de proximidad.
 
-## Cómo clonar y ejecutar
+## Cómo ejecutar la aplicación
 
-1. Clonar el repositorio:
-   ```bash
-   git clone https://github.com/yadiracantorin/Proyecto-Adaptativo.git
-   ```
-2. Abrir la carpeta del proyecto en Android Studio (`File → Open`).
-3. Esperar a que termine el **Gradle Sync** (la primera vez puede tardar más porque descarga el JDK 17 y las dependencias).
-4. Conectar un dispositivo físico (o usar un emulador) y ejecutar la app (▶).
-5. Al presionar **"INICIAR"** por primera vez, la app va a pedir dos permisos que Android no deja otorgar automáticamente:
+1. Abrir la carpeta del proyecto en Android Studio (`File → Open`).
+2. Esperar a que termine el **Gradle Sync** (la primera vez puede tardar más porque descarga el JDK 17 y las dependencias).
+3. Conectar un dispositivo físico (o usar un emulador) y ejecutar la app (▶).
+4. Al presionar **"INICIAR"** por primera vez, la app va a pedir dos permisos que Android no deja otorgar automáticamente:
    - **Acceso a datos de uso** (Usage Access) — necesario para detectar apps distractoras en primer plano.
    - **Mostrar sobre otras apps** — necesario para el bloqueo visual.
 
    Hay que activarlos manualmente en Ajustes y volver a la app.
+5. Para probar la adaptación por sensores: tapar el sensor de luz, agitar el celular, o ponerlo boca abajo/boca arriba durante una sesión activa (ver ejemplos en la sección anterior).
 
 ## Dependencias principales
 
