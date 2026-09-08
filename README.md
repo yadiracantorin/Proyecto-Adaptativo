@@ -6,7 +6,8 @@ Proyecto desarrollado para el **Taller 1 — Desarrollo de una Aplicación Adapt
 
 ## Equipo
 - Rosse Morales
-- Yadira C
+- Yadira Cantorín Lopez
+- Jose Diaz
 
 ## ¿Qué hace la app?
 FocusTo acompaña una sesión de estudio con un temporizador Pomodoro (25 min de estudio / 5 min de descanso) y un visor de PDF con zoom. Mientras el Pomodoro está activo, la app **observa el contexto físico del usuario en tiempo real** (luz ambiental, movimiento, proximidad, inclinación del teléfono) y **adapta automáticamente su comportamiento** sin que el usuario tenga que configurar nada manualmente.
