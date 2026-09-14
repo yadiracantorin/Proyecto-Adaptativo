@@ -61,7 +61,39 @@ class FocusViewModelTest {
         viewModel.onPomodoroPaused()
         val state = viewModel.currentState
         assertFalse(state.isPomodoroRunning)
+        assertTrue(state.isPaused)
         assertEquals("CONTINUAR", state.startButtonText)
+    }
+
+    @Test
+    fun `regresion - onPomodoroResumed NO reinicia la duracion de la sesion`() {
+        viewModel.onPomodoroStarted()
+        viewModel.onTimerTick("18:42") // el usuario ya avanzo bastante en la sesion
+        viewModel.onPomodoroPaused()
+
+        viewModel.onPomodoroResumed()
+
+        val state = viewModel.currentState
+        assertTrue(state.isPomodoroRunning)
+        assertFalse(state.isPaused)
+        assertEquals("PAUSAR", state.startButtonText)
+        // el texto del cronometro y la duracion de la sesion no se tocan al resumir:
+        // el tiempo restante real lo maneja FocusService y llega con el proximo tick
+        assertEquals("18:42", state.timerText)
+        assertEquals(state.studyDurationMs, state.currentSessionDuration)
+    }
+
+    @Test
+    fun `onPomodoroReset y onPomodoroFinished dejan isPaused en false`() {
+        viewModel.onPomodoroStarted()
+        viewModel.onPomodoroPaused()
+        viewModel.onPomodoroReset()
+        assertFalse(viewModel.currentState.isPaused)
+
+        viewModel.onPomodoroStarted()
+        viewModel.onPomodoroPaused()
+        viewModel.onPomodoroFinished(wasBreak = false)
+        assertFalse(viewModel.currentState.isPaused)
     }
 
     @Test
@@ -196,6 +228,40 @@ class FocusViewModelTest {
         assertTrue(viewModel.currentState.physicalStudyModeNotified)
         viewModel.setPhysicalStudyModeNotified(false)
         assertFalse(viewModel.currentState.physicalStudyModeNotified)
+    }
+
+    @Test
+    fun `onDurationsChanged aplica la nueva duracion cuando no hay sesion corriendo`() {
+        viewModel.onDurationsChanged(studyDurationMs = 50 * 60 * 1000L, breakDurationMs = 10 * 60 * 1000L)
+
+        val state = viewModel.currentState
+        assertEquals(50 * 60 * 1000L, state.studyDurationMs)
+        assertEquals(10 * 60 * 1000L, state.breakDurationMs)
+        assertEquals(50 * 60 * 1000L, state.currentSessionDuration)
+        assertEquals("50:00", state.timerText)
+    }
+
+    @Test
+    fun `onDurationsChanged no cambia el texto del cronometro si hay una sesion corriendo`() {
+        viewModel.onPomodoroStarted()
+        viewModel.onTimerTick("12:34")
+
+        viewModel.onDurationsChanged(studyDurationMs = 50 * 60 * 1000L, breakDurationMs = 10 * 60 * 1000L)
+
+        val state = viewModel.currentState
+        assertEquals("12:34", state.timerText) // no se pisa el cronometro en curso
+        assertEquals(50 * 60 * 1000L, state.studyDurationMs) // pero la config nueva ya quedo guardada
+    }
+
+    @Test
+    fun `onPomodoroStarted usa la duracion de descanso configurada, no la de estudio`() {
+        viewModel.onDurationsChanged(studyDurationMs = 50 * 60 * 1000L, breakDurationMs = 10 * 60 * 1000L)
+        viewModel.onPomodoroFinished(wasBreak = false) // pasa a modo descanso
+        viewModel.onPomodoroPaused()
+
+        viewModel.onPomodoroStarted() // retoma el descanso
+
+        assertEquals(10 * 60 * 1000L, viewModel.currentState.currentSessionDuration)
     }
 
     @Test

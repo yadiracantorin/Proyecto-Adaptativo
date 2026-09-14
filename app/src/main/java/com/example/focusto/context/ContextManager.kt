@@ -21,14 +21,29 @@ class ContextManager(private val onStateUpdated: (ContextState) -> Unit) {
     private var _isPhysicalStudyModeActive: Boolean = false
     val isPhysicalStudyModeActive: Boolean get() = _isPhysicalStudyModeActive
 
-    // Umbrales calibrados
-    private val lightThresholdLux = 12.0f
-    private val shakeThresholdAccel = 15.0f
+    // Umbrales calibrados. Arrancan con los valores por defecto de FocusConfig y se
+    // actualizan vía updateThresholds() en cuanto se carga (o cambia) la configuración
+    // persistida — por eso son 'var' y no 'val'.
+    private var lightThresholdLux = 12.0f
+    private var shakeThresholdAccel = 15.0f
 
     // Nota: El sensor de proximidad en la mayoría de celulares reacciona a < 5cm.
     // Usamos un umbral genérico que detecte la activación del sensor.
-    private val proximityThreshold = 4.0f
-    private val postureThresholdAngle = 45.0f
+    private var proximityThreshold = 4.0f
+    private var postureThresholdAngle = 45.0f
+
+    /** Reemplaza los umbrales calibrados (p. ej. al cargar o guardar la configuración). */
+    fun updateThresholds(
+        lightThresholdLux: Float,
+        shakeThresholdAccel: Float,
+        proximityThreshold: Float,
+        postureThresholdAngle: Float
+    ) {
+        this.lightThresholdLux = lightThresholdLux
+        this.shakeThresholdAccel = shakeThresholdAccel
+        this.proximityThreshold = proximityThreshold
+        this.postureThresholdAngle = postureThresholdAngle
+    }
 
     fun processRawData(lux: Float, accel: Float, proximity: Float, inclination: Float) {
         val currentState = ContextState(

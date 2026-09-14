@@ -34,4 +34,18 @@
     <string name="alert_bad_posture">¡ENDEREZA TU ESPALDA!\nMantén una postura saludable para tu cuello.</string>
     <string name="alert_too_close">¡MUY CERCA!\nAleja el teléfono para proteger tu vista.</string>
     <string name="alert_face_absent">PAUSA AUTOMÁTICA\nRetoma la lectura para continuar el tiempo.</string>
+
+    <!-- Ajustes -->
+    <string name="btn_settings">⚙</string>
+    <string name="settings_title">Ajustes</string>
+    <string name="settings_section_duration">Duración del Pomodoro</string>
+    <string name="profile_classic">Clásico (25 min / 5 min)</string>
+    <string name="profile_long">Largo (50 min / 10 min)</string>
+    <string name="profile_short">Corto (15 min / 3 min)</string>
+    <string name="settings_section_blocked_apps">Apps bloqueadas durante el estudio</string>
+    <string name="settings_cancel">CANCELAR</string>
+    <string name="settings_save">GUARDAR</string>
+
+    <!-- Accesibilidad -->
+    <string name="focus_motivator_description">Motivador de enfoque</string>
 </resources>

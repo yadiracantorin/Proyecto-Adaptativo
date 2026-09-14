@@ -1,6 +1,7 @@
 package com.example.focusto
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -40,6 +41,8 @@ import com.example.focusto.context.AdaptationEngine
 import com.example.focusto.context.ConcentrationMode
 import com.example.focusto.context.ContextManager
 import com.example.focusto.context.SensorService
+import com.example.focusto.config.FocusConfigRepository
+import com.example.focusto.config.SettingsActivity
 import com.example.focusto.pdf.PdfViewer
 import com.example.focusto.pomodoro.FocusPermissions
 import com.example.focusto.pomodoro.FocusService
@@ -71,6 +74,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvPomodoroTimer: TextView
     private lateinit var btnStartPomodoro: Button
     private lateinit var btnResetPomodoro: Button
+    private lateinit var btnSettings: Button
     private lateinit var layoutLockOverlay: RelativeLayout
     private lateinit var tvLockMessage: TextView
     private lateinit var btnUnlock: Button
@@ -121,6 +125,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sensorService: SensorService
     private lateinit var contextManager: ContextManager
     private val adaptationEngine = AdaptationEngine()
+    private val configRepository by lazy { FocusConfigRepository(applicationContext) }
 
     private val selectPdfLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
@@ -161,6 +166,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Carga la configuración persistida (duraciones, umbrales de sensores) y la aplica a
+     * ContextManager y al ViewModel. Se llama al crear la Activity y cada vez que vuelve a
+     * primer plano, para recoger cambios hechos en SettingsActivity sin reiniciar la app.
+     */
+    private fun loadAndApplyConfig() {
+        lifecycleScope.launch {
+            val config = configRepository.currentConfig()
+            contextManager.updateThresholds(
+                lightThresholdLux = config.lightThresholdLux,
+                shakeThresholdAccel = config.shakeThresholdAccel,
+                proximityThreshold = config.proximityThreshold,
+                postureThresholdAngle = config.postureThresholdAngle
+            )
+            viewModel.onDurationsChanged(config.studyDurationMs, config.breakDurationMs)
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         checkIntent(intent)
@@ -195,6 +218,7 @@ class MainActivity : AppCompatActivity() {
         tvPomodoroTimer = findViewById(R.id.tvPomodoroTimer)
         btnStartPomodoro = findViewById(R.id.btnStartPomodoro)
         btnResetPomodoro = findViewById(R.id.btnResetPomodoro)
+        btnSettings = findViewById(R.id.btnSettings)
         layoutLockOverlay = findViewById(R.id.layoutLockOverlay)
         tvLockMessage = findViewById(R.id.tvLockMessage)
         btnUnlock = findViewById(R.id.btnUnlock)
@@ -223,6 +247,8 @@ class MainActivity : AppCompatActivity() {
     private fun render(state: FocusUiState) {
         tvPomodoroTimer.text = state.timerText
         btnStartPomodoro.text = state.startButtonText
+        // No tiene sentido "reiniciar" si todavía no se inició ni hay nada pausado.
+        btnResetPomodoro.isEnabled = state.isPomodoroRunning || state.isPaused
 
         val alert = state.healthAlert
         if (alert != null) {
@@ -383,6 +409,9 @@ class MainActivity : AppCompatActivity() {
         viewModel.hideHealthAlert()
     }
 
+    // Estos OnTouchListener son para detectar gestos (zoom, "el usuario está tocando la
+    // pantalla"), no para representar un click — performClick() no aplicaría acá.
+    @SuppressLint("ClickableViewAccessibility")
     private fun setupZoomGestures() {
         scaleGestureDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
             override fun onScale(detector: ScaleGestureDetector): Boolean {
@@ -416,6 +445,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         sensorService.startListening()
+        loadAndApplyConfig()
         // Registrar el receiver unificado: tick + finish + motivador
         val filter = IntentFilter().apply {
             addAction(FocusService.ACTION_TIMER_TICK)
@@ -450,9 +480,17 @@ class MainActivity : AppCompatActivity() {
             }
         }
         btnStartPomodoro.setOnClickListener {
-            if (viewModel.currentState.isPomodoroRunning) pausePomodoro() else startPomodoro()
+            val state = viewModel.currentState
+            when {
+                state.isPomodoroRunning -> pausePomodoro()
+                state.isPaused -> resumePomodoro()
+                else -> startPomodoro()
+            }
         }
         btnResetPomodoro.setOnClickListener { resetPomodoro() }
+        btnSettings.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
         btnUnlock.setOnClickListener {
             viewModel.hideLockOverlay()
         }
@@ -468,6 +506,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * Retoma una sesión pausada. A diferencia de [startPomodoro], NO manda ACTION_START_FOCUS
+     * (eso reiniciaría el tiempo desde el total) — manda ACTION_RESUME_FOCUS, que FocusService
+     * ya sabe atender retomando desde el tiempo restante que tenía guardado al pausar.
+     */
+    private fun resumePomodoro() {
+        if (!checkPermissions()) return
+        viewModel.onPomodoroResumed()
+        setSilentMode(true)
+        sendToFocusService(FocusService.ACTION_RESUME_FOCUS)
+    }
+
+    /**
      * Llamado cuando el FocusService emite ACTION_TIMER_FINISH.
      * Si terminó una sesión de estudio → inicia descanso de 5 min automáticamente.
      * Si terminó un descanso → vuelve al estado inicial listo para otra sesión.
@@ -480,13 +530,13 @@ class MainActivity : AppCompatActivity() {
         if (!wasBreak) {
             // Terminó sesión de estudio → inicia descanso automáticamente
             Toast.makeText(this, "✅ ¡Pomodoro completado! Descansa 5 minutos.", Toast.LENGTH_LONG).show()
-            updateMotivator(0L, FocusViewModel.STUDY_DURATION_MS)   // motivador en estado máximo (flor/constelación)
+            updateMotivator(0L, state.studyDurationMs)   // motivador en estado máximo (flor/constelación)
             setSilentMode(false)
             sendToFocusService(FocusService.ACTION_START_FOCUS, state.currentSessionDuration, true)
         } else {
             // Terminó descanso → volver a estado inicial
             Toast.makeText(this, "☕ ¡Descanso terminado! Listo para otra sesión.", Toast.LENGTH_LONG).show()
-            updateMotivator(FocusViewModel.STUDY_DURATION_MS, FocusViewModel.STUDY_DURATION_MS)   // motivador al inicio (semilla)
+            updateMotivator(state.studyDurationMs, state.studyDurationMs)   // motivador al inicio (semilla)
         }
     }
 
@@ -500,7 +550,7 @@ class MainActivity : AppCompatActivity() {
         viewModel.onPomodoroReset()
         setSilentMode(false)
         sendToFocusService(FocusService.ACTION_STOP_FOCUS)
-        updateMotivator(FocusViewModel.STUDY_DURATION_MS, FocusViewModel.STUDY_DURATION_MS)
+        updateMotivator(viewModel.currentState.studyDurationMs, viewModel.currentState.studyDurationMs)
     }
 
     // ─── Helpers de comunicación con FocusService ───────────────────────────

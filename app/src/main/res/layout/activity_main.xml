@@ -12,46 +12,80 @@
         android:id="@+id/layoutPomodoro"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
+        android:orientation="vertical"
         android:padding="8dp"
         android:background="#1A000000"
         android:layout_alignParentTop="true"
         android:layout_marginBottom="8dp">
 
-        <!-- Motivador Adaptativo -->
-        <ImageView
-            android:id="@+id/ivFocusMotivator"
-            android:layout_width="60dp"
-            android:layout_height="60dp"
-            android:layout_marginEnd="8dp"
-            android:src="@drawable/ic_focus_seed"
-            android:contentDescription="Motivador de enfoque"/>
-
-        <TextView
-            android:id="@+id/tvPomodoroTimer"
-            android:layout_width="wrap_content"
+        <!-- Fila 1: Motivador + cronómetro + ajustes -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/timer_default"
-            android:textSize="24sp"
-            android:textStyle="bold"
-            android:textColor="@color/text_title_normal"
-            android:layout_marginEnd="16dp"/>
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
-        <Button
-            android:id="@+id/btnStartPomodoro"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/btn_start_pomodoro"
-            android:layout_marginEnd="8dp"/>
+            <!-- Motivador Adaptativo -->
+            <ImageView
+                android:id="@+id/ivFocusMotivator"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:layout_marginEnd="8dp"
+                android:src="@drawable/ic_focus_seed"
+                android:contentDescription="@string/focus_motivator_description"/>
 
-        <Button
-            android:id="@+id/btnResetPomodoro"
-            android:layout_width="0dp"
+            <TextView
+                android:id="@+id/tvPomodoroTimer"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/timer_default"
+                android:textSize="24sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_title_normal"
+                android:maxLines="1"
+                android:autoSizeTextType="uniform"
+                android:autoSizeMinTextSize="14sp"
+                android:autoSizeMaxTextSize="24sp"/>
+
+            <Button
+                android:id="@+id/btnSettings"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:minWidth="0dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:text="@string/btn_settings"
+                android:contentDescription="@string/settings_title"/>
+        </LinearLayout>
+
+        <!-- Fila 2: Controles del Pomodoro, con todo el ancho disponible -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/btn_reset_pomodoro"/>
+            android:orientation="horizontal"
+            android:layout_marginTop="8dp">
+
+            <Button
+                android:id="@+id/btnStartPomodoro"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/btn_start_pomodoro"
+                android:layout_marginEnd="8dp"
+                android:maxLines="1"
+                android:ellipsize="none"/>
+
+            <Button
+                android:id="@+id/btnResetPomodoro"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/btn_reset_pomodoro"
+                android:maxLines="1"
+                android:ellipsize="none"/>
+        </LinearLayout>
     </LinearLayout>
 
     <!-- Botón para abrir PDF -->

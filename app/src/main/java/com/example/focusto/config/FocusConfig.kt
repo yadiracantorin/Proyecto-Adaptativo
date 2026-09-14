@@ -13,13 +13,5 @@ data class FocusConfig(
     val shakeThresholdAccel: Float = 15.0f,
     val proximityThreshold: Float = 4.0f,
     val postureThresholdAngle: Float = 45.0f,
-    val blockedApps: Set<String> = setOf(
-        "com.zhiliaoapp.musically",   // TikTok
-        "com.instagram.android",
-        "com.facebook.katana",
-        "com.whatsapp",
-        "com.twitter.android",
-        "com.snapchat.android",
-        "com.google.android.youtube"
-    )
+    val blockedApps: Set<String> = BlockableApp.entries.map { it.packageName }.toSet()
 )

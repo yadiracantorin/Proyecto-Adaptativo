@@ -15,8 +15,12 @@ data class HealthAlert(val message: String, val isPositive: Boolean)
  */
 data class FocusUiState(
     val isPomodoroRunning: Boolean = false,
+    /** true solo cuando hay una sesión pausada a mitad de camino (no recién reiniciada). */
+    val isPaused: Boolean = false,
     val isBreakTime: Boolean = false,
-    val currentSessionDuration: Long = FocusViewModel.STUDY_DURATION_MS,
+    val studyDurationMs: Long = FocusViewModel.STUDY_DURATION_MS,
+    val breakDurationMs: Long = FocusViewModel.BREAK_DURATION_MS,
+    val currentSessionDuration: Long = studyDurationMs,
     val timerText: String = "25:00",
     val startButtonText: String = "INICIAR",
     val pdfUriString: String? = null,
@@ -54,27 +58,42 @@ class FocusViewModel : ViewModel() {
     val currentState: FocusUiState
         get() = _uiState.value
 
+    /** Arranca una sesión NUEVA (no una que estaba pausada) — usa la duración configurada. */
     fun onPomodoroStarted() {
-        val duration = if (currentState.isBreakTime) BREAK_DURATION_MS else STUDY_DURATION_MS
+        val duration = if (currentState.isBreakTime) currentState.breakDurationMs else currentState.studyDurationMs
         _uiState.value = currentState.copy(
             isPomodoroRunning = true,
+            isPaused = false,
             physicalStudyModeNotified = false,
             startButtonText = "PAUSAR",
             currentSessionDuration = duration
         )
     }
 
+    /**
+     * Retoma una sesión que estaba pausada, sin tocar `currentSessionDuration` ni `timerText`
+     * — el tiempo restante real vive en FocusService y llega solo por el próximo tick.
+     */
+    fun onPomodoroResumed() {
+        _uiState.value = currentState.copy(
+            isPomodoroRunning = true,
+            isPaused = false,
+            startButtonText = "PAUSAR"
+        )
+    }
+
     fun onPomodoroPaused() {
-        _uiState.value = currentState.copy(isPomodoroRunning = false, startButtonText = "CONTINUAR")
+        _uiState.value = currentState.copy(isPomodoroRunning = false, isPaused = true, startButtonText = "CONTINUAR")
     }
 
     fun onPomodoroReset() {
         _uiState.value = currentState.copy(
             isPomodoroRunning = false,
+            isPaused = false,
             isBreakTime = false,
             startButtonText = "INICIAR",
-            timerText = "25:00",
-            currentSessionDuration = STUDY_DURATION_MS
+            timerText = formatMillis(currentState.studyDurationMs),
+            currentSessionDuration = currentState.studyDurationMs
         )
     }
 
@@ -84,19 +103,36 @@ class FocusViewModel : ViewModel() {
             currentState.copy(
                 isBreakTime = true,
                 isPomodoroRunning = true,
+                isPaused = false,
                 startButtonText = "PAUSAR",
-                currentSessionDuration = BREAK_DURATION_MS,
-                timerText = "05:00"
+                currentSessionDuration = currentState.breakDurationMs,
+                timerText = formatMillis(currentState.breakDurationMs)
             )
         } else {
             currentState.copy(
                 isBreakTime = false,
                 isPomodoroRunning = false,
+                isPaused = false,
                 startButtonText = "INICIAR",
-                timerText = "25:00",
-                currentSessionDuration = STUDY_DURATION_MS
+                timerText = formatMillis(currentState.studyDurationMs),
+                currentSessionDuration = currentState.studyDurationMs
             )
         }
+    }
+
+    /**
+     * Aplica duraciones nuevas (desde la configuración persistida al arrancar, o desde la
+     * pantalla de ajustes). Si hay una sesión corriendo, no le cambia el tiempo restante —
+     * solo afecta a la próxima sesión/descanso.
+     */
+    fun onDurationsChanged(studyDurationMs: Long, breakDurationMs: Long) {
+        val activeDuration = if (currentState.isBreakTime) breakDurationMs else studyDurationMs
+        _uiState.value = currentState.copy(
+            studyDurationMs = studyDurationMs,
+            breakDurationMs = breakDurationMs,
+            currentSessionDuration = activeDuration,
+            timerText = if (currentState.isPomodoroRunning) currentState.timerText else formatMillis(activeDuration)
+        )
     }
 
     fun onTimerTick(timerText: String) {
@@ -155,5 +191,12 @@ class FocusViewModel : ViewModel() {
 
     fun hideLockOverlay() {
         _uiState.value = currentState.copy(lockMessage = null)
+    }
+
+    private fun formatMillis(ms: Long): String {
+        val totalSeconds = ms / 1000
+        val minutes = totalSeconds / 60
+        val seconds = totalSeconds % 60
+        return "%02d:%02d".format(minutes, seconds)
     }
 }
