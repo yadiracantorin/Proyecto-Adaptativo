@@ -1,4 +1,4 @@
-package com.example.focusto
+package com.example.focusto.context
 
 import android.os.SystemClock
 
@@ -24,7 +24,7 @@ class ContextManager(private val onStateUpdated: (ContextState) -> Unit) {
     // Umbrales calibrados
     private val lightThresholdLux = 12.0f
     private val shakeThresholdAccel = 15.0f
-    
+
     // Nota: El sensor de proximidad en la mayoría de celulares reacciona a < 5cm.
     // Usamos un umbral genérico que detecte la activación del sensor.
     private val proximityThreshold = 4.0f
@@ -32,9 +32,9 @@ class ContextManager(private val onStateUpdated: (ContextState) -> Unit) {
 
     fun processRawData(lux: Float, accel: Float, proximity: Float, inclination: Float) {
         val currentState = ContextState(
-            rawLux = lux, 
-            rawAccel = accel, 
-            rawProximity = proximity, 
+            rawLux = lux,
+            rawAccel = accel,
+            rawProximity = proximity,
             rawInclination = inclination
         )
         // Actualizar el estado del Modo Físico antes de notificar

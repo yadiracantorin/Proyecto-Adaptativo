@@ -33,7 +33,7 @@
         </activity>
 
         <service
-            android:name=".FocusService"
+            android:name=".pomodoro.FocusService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="specialUse">

@@ -5,8 +5,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.graphics.Bitmap
-import android.graphics.pdf.PdfRenderer
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -15,7 +13,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.CountDownTimer
-import android.os.ParcelFileDescriptor
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -33,17 +30,23 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import androidx.core.graphics.createBitmap
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.example.focusto.context.AdaptationEngine
+import com.example.focusto.context.ConcentrationMode
+import com.example.focusto.context.ContextManager
+import com.example.focusto.context.SensorService
+import com.example.focusto.pdf.PdfViewer
+import com.example.focusto.pomodoro.FocusPermissions
+import com.example.focusto.pomodoro.FocusService
+import com.example.focusto.pomodoro.FocusUiState
+import com.example.focusto.pomodoro.FocusViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
-import java.io.FileOutputStream
 
 
 class MainActivity : AppCompatActivity() {
@@ -111,9 +114,7 @@ class MainActivity : AppCompatActivity() {
     private val minZoomLevel = 1.0f
     private val maxZoomLevel = 5.0f
 
-    private var pdfRenderer: PdfRenderer? = null
-    private var currentPdfPage: PdfRenderer.Page? = null
-    private var fileDescriptor: ParcelFileDescriptor? = null
+    private val pdfViewer = PdfViewer(this)
 
     private lateinit var sensorService: SensorService
     private lateinit var contextManager: ContextManager
@@ -510,28 +511,17 @@ class MainActivity : AppCompatActivity() {
     // ─── Permisos ────────────────────────────────────────────────────────────
 
     private fun checkPermissions(): Boolean {
-        if (!isUsageStatsPermissionGranted()) {
+        if (!FocusPermissions.isUsageStatsGranted(this)) {
             Toast.makeText(this, "Permite el acceso a datos de uso para el bloqueo", Toast.LENGTH_LONG).show()
             startActivity(Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS))
             return false
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(this)) {
+        if (!FocusPermissions.isOverlayGranted(this)) {
             Toast.makeText(this, "Permite mostrar sobre otras apps para el bloqueo", Toast.LENGTH_LONG).show()
             startActivity(Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
             return false
         }
         return true
-    }
-
-    private fun isUsageStatsPermissionGranted(): Boolean {
-        val appOps = getSystemService(Context.APP_OPS_SERVICE) as android.app.AppOpsManager
-        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            appOps.unsafeCheckOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), packageName)
-        } else {
-            @Suppress("DEPRECATION")
-            appOps.checkOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), packageName)
-        }
-        return mode == android.app.AppOpsManager.MODE_ALLOWED
     }
 
     // ─── Motivador visual ────────────────────────────────────────────────────
@@ -569,20 +559,10 @@ class MainActivity : AppCompatActivity() {
     private fun openPdfFromUri(uri: Uri) {
         try {
             closePdfRenderer()
-            val inputStream = contentResolver.openInputStream(uri) ?: return
-            val tempFile = File(cacheDir, "selected_doc.pdf")
-            val outputStream = FileOutputStream(tempFile)
-            inputStream.copyTo(outputStream)
-            inputStream.close()
-            outputStream.close()
-            fileDescriptor = ParcelFileDescriptor.open(tempFile, ParcelFileDescriptor.MODE_READ_ONLY)
-            fileDescriptor?.let { fd ->
-                pdfRenderer = PdfRenderer(fd)
-                val pageCount = pdfRenderer?.pageCount ?: 0
-                if (pageCount > 0) {
-                    viewModel.onPdfOpened(uri.toString(), pageCount) // ← El usuario tiene material digital; desactiva la intuición física
-                    renderPage(0)
-                }
+            val pageCount = pdfViewer.open(uri)
+            if (pageCount > 0) {
+                viewModel.onPdfOpened(uri.toString(), pageCount) // ← El usuario tiene material digital; desactiva la intuición física
+                renderPage(0)
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -592,43 +572,18 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun renderPage(index: Int) {
-        val renderer = pdfRenderer ?: return
-        if (index < 0 || index >= renderer.pageCount) return
+        if (index < 0 || index >= pdfViewer.pageCount) return
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                currentPdfPage?.close()
-                currentPdfPage = renderer.openPage(index)
-                val page = currentPdfPage ?: return@launch
-                val multiplier = currentZoomLevel
-                val bitmap = createBitmap((page.width * multiplier).toInt(), (page.height * multiplier).toInt(), Bitmap.Config.ARGB_8888)
-                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                val processedBitmap = if (viewModel.currentState.isNightModeActive) invertBitmapColors(bitmap) else bitmap
+                val bitmap = pdfViewer.renderPage(index, currentZoomLevel, viewModel.currentState.isNightModeActive) ?: return@launch
                 withContext(Dispatchers.Main) {
                     pdfImageView.scaleX = 1.0f
                     pdfImageView.scaleY = 1.0f
-                    pdfImageView.setImageBitmap(processedBitmap)
+                    pdfImageView.setImageBitmap(bitmap)
                     updateSensorAndPageText()
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
-    }
-
-    private fun invertBitmapColors(src: Bitmap): Bitmap {
-        val width = src.width
-        val height = src.height
-        val output = createBitmap(width, height, src.config ?: Bitmap.Config.ARGB_8888)
-        val pixels = IntArray(width * height)
-        src.getPixels(pixels, 0, width, 0, 0, width, height)
-        for (i in pixels.indices) {
-            val pixel = pixels[i]
-            val a = pixel shr 24 and 0xff
-            val r = pixel shr 16 and 0xff
-            val g = pixel shr 8 and 0xff
-            val b = pixel and 0xff
-            pixels[i] = (a shl 24) or ((255 - r) shl 16) or ((255 - g) shl 8) or (255 - b)
-        }
-        output.setPixels(pixels, 0, width, 0, 0, width, height)
-        return output
     }
 
     private fun updateSensorAndPageText(state: FocusUiState = viewModel.currentState) {
@@ -660,12 +615,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun closePdfRenderer() {
         try {
-            currentPdfPage?.close()
-            currentPdfPage = null
-            pdfRenderer?.close()
-            pdfRenderer = null
-            fileDescriptor?.close()
-            fileDescriptor = null
+            pdfViewer.close()
             viewModel.onPdfClosed()
         } catch (e: Exception) { e.printStackTrace() }
     }

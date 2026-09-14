@@ -1,4 +1,4 @@
-package com.example.focusto
+package com.example.focusto.context
 
 import android.content.Context
 import android.hardware.Sensor
@@ -46,7 +46,7 @@ class SensorService(context: Context, private val onDataReceived: (Float, Float,
 
                     // Magnitud total de la aceleración
                     val magnitude = sqrt((x * x + y * y + z * z).toDouble()).toFloat()
-                    
+
                     // Cálculo del módulo de aceleración dinámica (restando gravedad)
                     currentAcceleration = kotlin.math.abs(magnitude - SensorManager.GRAVITY_EARTH)
 

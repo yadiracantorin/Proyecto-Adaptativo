@@ -1,4 +1,4 @@
-package com.example.focusto
+package com.example.focusto.pomodoro
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

@@ -1,4 +1,4 @@
-package com.example.focusto
+package com.example.focusto.pomodoro
 
 import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 data class HealthAlert(val message: String, val isPositive: Boolean)
 
 /**
- * Estado de UI de [MainActivity]. Se guarda como un único bloque inmutable para que
+ * Estado de UI de MainActivity. Se guarda como un único bloque inmutable para que
  * `MainActivity` pueda restaurarlo por completo tras recrearse (p. ej. al rotar la pantalla),
  * sin depender de que el usuario recuerde interactuar de nuevo con la pantalla.
  */
@@ -32,7 +32,7 @@ data class FocusUiState(
 )
 
 /**
- * Mantiene el estado de UI que hoy vive disperso en variables de [MainActivity].
+ * Mantiene el estado de UI que hoy vive disperso en variables de MainActivity.
  * Al sobrevivir a la recreación de la Activity (rotación de pantalla), evita que la UI
  * quede desincronizada del estado real (p. ej. el Pomodoro sigue corriendo en FocusService
  * pero la Activity recién creada mostraría "INICIAR").

@@ -1,4 +1,4 @@
-package com.example.focusto
+package com.example.focusto.pomodoro
 
 import android.app.*
 import android.app.usage.UsageStatsManager
@@ -8,6 +8,15 @@ import android.os.*
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.example.focusto.MainActivity
+import com.example.focusto.R
+import com.example.focusto.config.FocusConfig
+import com.example.focusto.config.FocusConfigRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 class FocusService : Service() {
 
@@ -53,15 +62,14 @@ class FocusService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private val checkAppsInterval = 2000L
 
-    private val blacklist = listOf(
-        "com.zhiliaoapp.musically",   // TikTok
-        "com.instagram.android",
-        "com.facebook.katana",
-        "com.whatsapp",
-        "com.twitter.android",
-        "com.snapchat.android",
-        "com.google.android.youtube"
-    )
+    // --- Configuración (persistida con DataStore vía FocusConfigRepository) ---
+    // Arranca con los valores por defecto (idénticos a los que antes eran fijos en código)
+    // y se actualiza en cuanto termina de leer la configuración real en onCreate().
+    // No hay ninguna pantalla que hoy escriba un valor distinto, así que el comportamiento
+    // observable no cambia — pero ya no está hardcodeado.
+    private val configRepository by lazy { FocusConfigRepository(applicationContext) }
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var blockedApps: Set<String> = FocusConfig().blockedApps
 
     // --- Binder ---
     private val binder = LocalBinder()
@@ -78,6 +86,9 @@ class FocusService : Service() {
         super.onCreate()
         createNotificationChannels()
         acquireWakeLock()
+        serviceScope.launch {
+            blockedApps = configRepository.currentConfig().blockedApps
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -98,6 +109,7 @@ class FocusService : Service() {
         pomodoroTimer?.cancel()
         handler.removeCallbacksAndMessages(null)
         releaseWakeLock()
+        serviceScope.cancel()
         super.onDestroy()
     }
 
@@ -232,7 +244,7 @@ class FocusService : Service() {
         val stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, time - 10_000, time)
         if (!stats.isNullOrEmpty()) {
             val topApp = stats.maxByOrNull { it.lastTimeUsed }?.packageName ?: return
-            if (blacklist.contains(topApp)) {
+            if (blockedApps.contains(topApp)) {
                 Log.d("FocusService", "Bloqueando app: $topApp")
                 launchBlockOverlay()
             }

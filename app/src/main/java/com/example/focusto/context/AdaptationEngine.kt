@@ -1,4 +1,4 @@
-package com.example.focusto
+package com.example.focusto.context
 
 enum class ConcentrationMode {
     NORMAL,
