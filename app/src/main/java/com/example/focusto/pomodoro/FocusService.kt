@@ -1,13 +1,16 @@
 package com.example.focusto.pomodoro
 
+import android.Manifest
 import android.app.*
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.*
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.example.focusto.MainActivity
 import com.example.focusto.R
 import com.example.focusto.config.FocusConfig
@@ -278,6 +281,7 @@ class FocusService : Service() {
     }
 
     private fun updateNotification(title: String, content: String) {
+        if (!hasNotificationPermission()) return
         val nm = getSystemService(NotificationManager::class.java)
         nm.notify(NOTIFICATION_ID, createNotification(title, content))
     }
@@ -304,7 +308,14 @@ class FocusService : Service() {
             // Vibración de aviso: patrón largo para que se note con pantalla apagada
             .setVibrate(longArrayOf(0, 400, 200, 400, 200, 600))
             .build()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         NotificationManagerCompat.from(this).notify(ALERT_NOTIF_ID, notif)
+    }
+
+    /** En Android 13+ publicar una notificación requiere este permiso en tiempo de ejecución. */
+    private fun hasNotificationPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
     }
 
     private fun createNotificationChannels() {

@@ -1,10 +1,12 @@
 package com.example.focusto
 
+import android.Manifest
 import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -126,6 +128,11 @@ class MainActivity : AppCompatActivity() {
         uri?.let { openPdfFromUri(it) }
     }
 
+    // Si se niega, las notificaciones de alerta del Pomodoro simplemente no se muestran
+    // (FocusService ya verifica el permiso antes de intentar publicarlas).
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -139,9 +146,18 @@ class MainActivity : AppCompatActivity() {
             observeUiState()
             restorePdfIfNeeded()
             checkIntent(intent)
+            requestNotificationPermissionIfNeeded()
         } catch (e: Exception) {
             e.printStackTrace()
             Toast.makeText(this, "Error al iniciar: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 
@@ -406,11 +422,7 @@ class MainActivity : AppCompatActivity() {
             addAction(FocusService.ACTION_TIMER_FINISH)
             addAction(FocusService.ACTION_PROGRESS_UPDATE)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(focusServiceReceiver, filter, RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(focusServiceReceiver, filter)
-        }
+        ContextCompat.registerReceiver(this, focusServiceReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
     }
 
     override fun onPause() {
